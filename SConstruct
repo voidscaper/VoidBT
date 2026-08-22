@@ -9,10 +9,26 @@ import sys
 env = SConscript("godot-cpp/SConstruct")
 
 # Configures the 'src' directory as a source for header files.
-env.Append(CPPPATH=["src/"])
+INCLUDE_PATHS = [
+    "src/",
+    "src/base/",
+    "src/base/composite",
+    "src/implementation/nexus"
+]
+env.Append(CPPPATH=INCLUDE_PATHS)
 
 # Collects all .cpp files in the 'src' folder as compile targets.
+SOURCE_PATHS = [
+    "src/base/*.cpp",
+    "src/base/composite/*.cpp",
+    "src/implementation/nexus/*.cpp"
+]
 sources = Glob("src/*.cpp")
+for source in SOURCE_PATHS:
+    sources += Glob(source)
+# 
+# sources += Glob("src/base/*.cpp")
+# sources += Glob("src/base/composite/*.cpp")
 
 # The filename for the dynamic library for this GDExtension.
 # $SHLIBPREFIX is a platform specific prefix for the dynamic library ('lib' on Unix, '' on Windows).
@@ -20,13 +36,16 @@ sources = Glob("src/*.cpp")
 # env["suffix"] includes the build's feature tags (e.g. '.windows.template_debug.x86_64')
 # (see https://docs.godotengine.org/en/stable/tutorials/export/feature_tags.html).
 # The final path should match a path in the '.gdextension' file.
-lib_filename = "{}gdexample{}{}".format(env.subst('$SHLIBPREFIX'), env["suffix"], env.subst('$SHLIBSUFFIX'))
+lib_filename = "{}voidbt{}{}".format(env.subst('$SHLIBPREFIX'), env["suffix"], env.subst('$SHLIBSUFFIX'))
 
 # Creates a SCons target for the path with our sources.
+#library = env.SharedLibrary(
+#    "project/bin/{}".format(lib_filename),
+#    source=sources,
+#)
 library = env.SharedLibrary(
-    "project/bin/{}".format(lib_filename),
+    "C:/Forge/Godot/Rime/rime/addons/VoidBT/{}".format(lib_filename),
     source=sources,
 )
-
 # Selects the shared library as the default target.
 Default(library)

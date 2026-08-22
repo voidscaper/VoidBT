@@ -4,5 +4,5 @@
 
 using namespace godot;
 
-void initialize_example_module(ModuleInitializationLevel p_level);
-void uninitialize_example_module(ModuleInitializationLevel p_level);
+void initialize_voidbt_module(ModuleInitializationLevel p_level);
+void uninitialize_voidbt_module(ModuleInitializationLevel p_level);

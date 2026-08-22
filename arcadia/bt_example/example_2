@@ -1,0 +1,144 @@
+**Yes, absolutely.** That is *exactly* its primary architectural purpose. 
+
+The Blackboard is the **glue** that loosely couples three major systems:
+
+1. **The Event System** (what happened)
+2. **The Behavior Tree** (the decision-maker)
+3. **The Navigation/Animation Systems** (the doers)
+
+Without a Blackboard, everything would be tightly coupled (a nightmare). With it, each system only knows about the Blackboard—and nothing else. 
+
+Here is a block diagram showing the **tight vs. loose** comparison:
+
+---
+
+### 1. TIGHT COUPLING (The "Bad" Way)
+*The Tree talks directly to external systems. Changing your raycast code breaks your AI.*
+
+```
+┌─────────────────┐                      ┌─────────────────────────┐
+│  Raycast System │─────────────────────▶│  BEHAVIOR TREE          │
+│  (Event Source) │  Direct Function     │  (Hardcoded to listen   │
+└─────────────────┘  Call:               │   for this specific     │
+                     "OnRaycastHit()"    │   event)                │
+                                         └───────────┬─────────────┘
+                                                     │ Direct Call
+                                                     ▼
+                                         ┌─────────────────────────┐
+                                         │  Navigation System      │
+                                         │  (Hardcoded to receive  │
+                                         │   "Flee" from Tree)     │
+                                         └─────────────────────────┘
+```
+
+**The Problem:** If you change how the raycast works, or swap Unity NavMesh for Unreal EQS, you have to rewrite the Tree.
+
+---
+
+### 2. LOOSE COUPLING (The Blackboard Way)
+*The Tree only reads/writes generic variables. External systems only read/write generic variables. Nobody knows who is on the other side.*
+
+```
+          ┌──────────────────────────────────────────────────┐
+          │                  BLACKBOARD                     │
+          │  (A simple dictionary of shared variables)      │
+          │                                                 │
+          │  "ThreatDetected" = true/false                  │
+          │  "ThreatPosition" = Vector3                     │
+          │  "FleeDestination" = Vector3                    │
+          │  "NPC_Health" = 100                             │
+          └───────────────┬──────────────────┬──────────────┘
+                          │                  │
+         WRITE (Set)      │                  │  READ (Get)    
+                          ▼                  ▼
+┌─────────────────────────┐    ┌─────────────────────────────┐
+│   EXTERNAL WORLD        │    │   BEHAVIOR TREE             │
+│  (Events, Sensors,      │    │  (Only cares about keys     │
+│   Damage System, etc.)  │    │   in the Blackboard)        │
+│                         │    │                             │
+│  Raycast hits?          │    │  Condition Leaf:            │
+│  → Set "ThreatDetected" │    │  "Is ThreatDetected == true"?│
+│  → Set "ThreatPosition" │    │                             │
+│                         │    │  Action Leaf:               │
+│  Navigation finishes?   │    │  Read "FleeDestination"     │
+│  → Set "AtDestination"  │    │  and tell Navigation to go  │
+└─────────────────────────┘    └──────────────┬──────────────┘
+                                              │ WRITE (Set)
+                                              ▼
+                                    ┌─────────────────────────┐
+                                    │   NAVIGATION SYSTEM     │
+                                    │  (Only reads Blackboard │
+                                    │   for destinations)     │
+                                    └─────────────────────────┘
+```
+
+---
+
+### Why this makes it "Loosely Coupled" (The Benefits)
+
+| **Aspect** | **Without Blackboard (Tight)** | **With Blackboard (Loose)** |
+| :--- | :--- | :--- |
+| **The Tree** | Knows exactly which raycast function to call and which nav system to use. | Knows *nothing* about who writes to the Blackboard or who reads from it. |
+| **The Raycast** | Must hold a direct reference to the Tree to tell it "I hit something." | Just writes a `bool` to a shared data container. Doesn't even know if a Tree exists. |
+| **The Navigation** | Must be called directly by the Tree's "Move" function. | The "Move" Leaf writes a destination; the Nav system *independently* reads it and moves. |
+| **Testing** | You need to spawn the entire game to test the AI. | You can manually set `ThreatDetected = true` in the Blackboard via a debug menu, and the Tree will flee. Perfect for Unit Testing. |
+| **Swapping Systems** | Swapping Unity for Unreal means rewriting the entire Tree. | The Blackboard keys (`ThreatPosition`) stay the same. You only rewrite the external "sensor" and "movement" plugins that read/write those keys. |
+
+---
+
+### The "Is-A" Relationship (Architectural Layers)
+
+Think of the Blackboard as the **database** of the AI. The Behavior Tree is just a **query processor** that runs SQL-like checks on that database.
+
+```
+┌───────────────────────────────────────────────────────────────┐
+│                     PRESENTATION LAYER                       │
+│  (The Game World: Raycasts, Physics, Player Input)           │
+└───────────────────────────┬───────────────────────────────────┘
+                            │  Writes facts to Blackboard
+                            ▼
+┌───────────────────────────────────────────────────────────────┐
+│                     DATA LAYER (BLACKBOARD)                  │
+│  "The Source of Truth" - Holds state, no logic.              │
+└───────────────────────────┬───────────────────────────────────┘
+                            │  Tree reads facts
+                            ▼
+┌───────────────────────────────────────────────────────────────┐
+│                     LOGIC LAYER (BEHAVIOR TREE)              │
+│  Decides what to do based on Blackboard data.                │
+│  Writes commands (like "FleeDestination") back to Blackboard.│
+└───────────────────────────┬───────────────────────────────────┘
+                            │  External systems read commands
+                            ▼
+┌───────────────────────────────────────────────────────────────┐
+│                     EXECUTION LAYER                          │
+│  (Navigation, Animation, Sound) - Perform the commands.      │
+└───────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### One subtle but crucial detail about "Loose Coupling"
+Because the Tree and Events only share *data* (not *methods*), you get **decoupling in time** as well.
+
+- The **Raycast** fires at 1:00:00 PM and sets `Threat = true`.
+- The **Behavior Tree** doesn't tick (check) until 1:00:00.016 seconds (next frame).
+- The Tree doesn't care about the delay. It just reads whatever is currently in the Blackboard.
+
+**Block Diagram of Temporal Decoupling:**
+
+```
+Time ──────────────────────────────────────────────────────────▶
+
+[Raycast Event] ──┐
+                   │  WRITE
+                   ▼
+            ┌─────────────┐
+            │ BLACKBOARD  │ (Holds Threat=true until overwritten)
+            └─────────────┘
+                   │  READ (16ms later)
+                   ▼
+            [Behavior Tree Tick] ──▶ NPC Flees
+```
+
+Because the Blackboard *persists* the data, you don't need the Event and the Tree to happen simultaneously. The Event fires, goes away forever, and the Blackboard remembers it for the Tree. That is the ultimate form of loose coupling.
