@@ -10,26 +10,39 @@ env = SConscript("godot-cpp/SConstruct")
 
 # Configures the 'src' directory as a source for header files.
 INCLUDE_PATHS = [
+    ".",
     "src/",
-    "src/base/",
-    "src/base/composite",
-    "src/implementation/nexus"
+    "src/base/core/",
+    "src/base/blackboard/",
+    "src/base/nexus",
+    "src/base/factory/",
+    "src/base/data/",
+    "src/implementation/core/",
+    "src/implementation/blackboard",
+    "src/implementation/nexus",
+    "src/implementation/factory",
+    "src/implementation/data"
 ]
 env.Append(CPPPATH=INCLUDE_PATHS)
 
 # Collects all .cpp files in the 'src' folder as compile targets.
 SOURCE_PATHS = [
-    "src/base/*.cpp",
-    "src/base/composite/*.cpp",
-    "src/implementation/nexus/*.cpp"
+    "src/base/core/*.cpp"
+    "src/base/blackboard/*.cpp",
+    "src/base/nexus/*.cpp",
+    "src/base/factory/*.cpp",
+    "src/base/data/*.cpp",
+    "src/implementation/core/*.cpp",
+    "src/implementation/blackboard/*.cpp",
+    "src/implementation/nexus/*.cpp",
+    "src/implementation/factory/*.cpp",
+    "src/implementation/data/*.cpp"
 ]
 sources = Glob("src/*.cpp")
 for source in SOURCE_PATHS:
     sources += Glob(source)
-# 
-# sources += Glob("src/base/*.cpp")
-# sources += Glob("src/base/composite/*.cpp")
 
+#sources += Glob("src/implementation/nexus/*.cpp")
 # The filename for the dynamic library for this GDExtension.
 # $SHLIBPREFIX is a platform specific prefix for the dynamic library ('lib' on Unix, '' on Windows).
 # $SHLIBSUFFIX is the platform specific suffix for the dynamic library (for example '.dll' on Windows).

@@ -1,27 +1,26 @@
 /**
  * voidbt_nexus.hpp
  * =============================================================================
- * Nexus for all interaction between the gdscript and the gdextension
+ * Copyright 2026 Joshua Jacob <voidscaper>
+ * Nexus for all interactions between godot and the VoidBT gdextension
  * =============================================================================
  */
 
- #pragma once
+#pragma once
 
- #include "voidbt_node.h"
+#include "src/base/nexus/voidbt_nexus_base.hpp"
 
- namespace godot {
-    class VoidBTNexus: public VoidBTNode {
-        GDCLASS(VoidBTNexus, VoidBTNode)
-
-        private:
-
-        protected:
-            static void _bind_methods();
-            
-        public:
-            VoidBTNexus();
-            ~VoidBTNexus();
-            bool bootstrap_bt_tree();
-            int tick(double) override;  
-    };
- }
+namespace godot {
+class VoidBTNexus: public VoidBTNexusBase {
+    GDCLASS(VoidBTNexus, VoidBTNexusBase)
+ private:
+ protected:
+    static void _bind_methods();
+ public:
+    VoidBTNexus();
+    ~VoidBTNexus();
+    bool bootstrap_bt_tree() override;
+    // int tick(double) override;
+    // bool initialize_bt(VoidBTNode);
+};
+}  // namespace godot
