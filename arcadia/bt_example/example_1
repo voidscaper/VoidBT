@@ -1,0 +1,229 @@
+Here’s how a single Raycast Hit event triggers an NPC to flee, broken down into classic Behavior Tree components—using only block diagrams, no code.
+
+---
+
+### 1. The Core Concept (Block Diagram)
+The Event doesn’t go directly to the Tree. It **writes to Blackboard**. The Tree **ticks** (checks) that Blackboard value each frame and chooses the right branch.
+
+```
+┌─────────────────┐         ┌─────────────────┐
+│  Raycast Hit    │────────▶│   Blackboard    │
+│    (Event)      │   Set   │  "ThreatDetected│
+└─────────────────┘         │   = true"       │
+                            │  "ThreatPos"     │
+                            └────────┬────────┘
+                                     │ (Read each tick)
+                                     ▼
+                            ┌─────────────────┐
+                            │  Behavior Tree  │
+                            │   (Root Task)   │
+                            └─────────────────┘
+```
+
+---
+
+### 2. The Top-Level Tree Structure (Selector / Priority)
+The **Root** is a **Selector** (Priority node). It runs the highest-priority child that can execute.
+
+```
+                    ┌─────────────────────┐
+                    │   SELECTOR (Root)   │  (Runs first valid child)
+                    └──────────┬──────────┘
+                               │
+         ┌─────────────────────┼─────────────────────┐
+         │                     │                     │
+         ▼                     ▼                     ▼
+┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
+│  Sequence       │   │  Sequence       │   │  Leaf: Idle     │
+│  (Flee Branch)  │   │  (Patrol Branch)│   │  (Always runs   │
+│  Priority: HIGH │   │  Priority: MED  │   │   if nothing    │
+└─────────────────┘   └─────────────────┘   │   else works)   │
+                                             └─────────────────┘
+```
+
+---
+
+### 3. The Flee Branch (Sequence with Conditions)
+This runs **only if** the Blackboard says there is a threat. It uses a **Condition Leaf** at the start.
+
+```
+                    ┌─────────────────────────────┐
+                    │    SEQUENCE (Flee Branch)   │  (All children must succeed in order)
+                    └──────────────┬──────────────┘
+                                   │
+          ┌────────────────────────┼────────────────────────┐
+          │                        │                        │
+          ▼                        ▼                        ▼
+┌─────────────────────┐  ┌─────────────────────┐  ┌─────────────────────┐
+│  LEAF: Condition    │  │  LEAF: Action       │  │  LEAF: Action       │
+│  "Is Threat         │  │  "Calculate Flee    │  │  "Move to Flee      │
+│   Detected?"        │  │   Direction"        │  │   Point"            │
+│  (Checks Blackboard)│  │  (Writes FleePos    │  │  (Navigates NPC)    │
+└─────────────────────┘  │   to Blackboard)    │  └─────────────────────┘
+                         └─────────────────────┘
+```
+
+**Flow (tick-by-tick):**
+1. **Condition** checks `ThreatDetected`. If `false` → returns **Failure**, Sequence stops.
+2. If `true` → returns **Success** → moves to **Action: Calculate**.
+3. **Calculate** reads `ThreatPos`, computes opposite direction, writes `FleePos` to Blackboard → returns **Success**.
+4. **Move** reads `FleePos`, starts navigation. Returns **Running** until NPC arrives. Once there → returns **Success** (then the Sequence is done).
+
+---
+
+### 4. The Under-the-Hood: Composite & Leaf Classes
+These are the actual class types you'd implement. The diagram shows how they inherit and what they do.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     BEHAVIOR TREE                          │
+│  (Base Class: Task)                                       │
+└─────────────────────────────────────────────────────────────┘
+                             │
+            ┌────────────────┼────────────────┐
+            │                │                │
+            ▼                ▼                ▼
+┌───────────────────┐ ┌───────────────────┐ ┌───────────────────┐
+│   COMPOSITE       │ │   DECORATOR       │ │   LEAF (Action/   │
+│  (Has children)   │ │  (Wraps 1 child)  │ │    Condition)     │
+└─────────┬─────────┘ └───────────────────┘ └─────────┬─────────┘
+          │                                           │
+    ┌─────┼─────┐                              ┌──────┼──────┐
+    │     │     │                              │      │      │
+    ▼     ▼     ▼                              ▼      ▼      ▼
+┌─────┐ ┌─────┐ ┌─────┐               ┌──────────┐ ┌──────────┐
+│SEQ  │ │SEL  │ │PAR  │               │ Condition│ │  Action  │
+│     │ │     │ │     │               │ (Check   │ │ (Do      │
+│All  │ │First│ │All  │               │  State)  │ │  Thing)  │
+│must │ │valid│ │until│               └──────────┘ └──────────┘
+│Suc. │ │one  │ │fail │
+└─────┘ └─────┘ └─────┘
+```
+
+---
+
+### 5. Full Trace: From Raycast to NPC Running
+This is the complete signal flow in block form.
+
+```
+    [PLAYER SHOOTS RAY]                    [BEHAVIOR TREE TICK (60x/sec)]
+            │                                        │
+            ▼                                        ▼
+   ┌─────────────────┐                   ┌─────────────────────┐
+   │ Raycast Hits NPC │                   │  Root Selector      │
+   └────────┬─────────┘                   │  (Checks children   │
+            │                             │   in priority order)│
+            ▼                             └─────────┬───────────┘
+   ┌─────────────────┐                              │
+   │ Set Blackboard: │                      ┌───────┴───────┐
+   │ Threat=True     │                      │               │
+   │ ThreatPos = Hit │                      ▼               ▼
+   └─────────────────┘             ┌───────────────┐ ┌──────────────┐
+                                   │  Flee Seq.    │ │  Patrol Seq. │
+                                   │  (Priority 1) │ │  (Priority 2)│
+                                   └───────┬───────┘ └──────────────┘
+                                           │
+                                           ▼
+                                  ┌─────────────────────┐
+                                  │ Cond: Threat True?  │── YES ──▶ Success
+                                  └─────────────────────┘
+                                           │
+                                           ▼
+                                  ┌─────────────────────┐
+                                  │ Action: Calc Flee   │───▶ Writes FleePos
+                                  └─────────────────────┘
+                                           │
+                                           ▼
+                                  ┌─────────────────────┐
+                                  │ Action: Move to     │───▶ Returns RUNNING
+                                  │ FleePos             │      (re-ticked next frame)
+                                  └─────────────────────┘
+                                           │
+                                           ▼
+                                  [NPC Moves Away from Player]
+```
+
+---
+
+### 6. How Running is Handled (The "Tick" Loop)
+The Tree doesn't run once—it **ticks every frame**. The **Move Action** returns `RUNNING` until complete.
+
+```
+                     FRAME 1                      FRAME 2
+                        │                           │
+                        ▼                           ▼
+              ┌───────────────────┐       ┌───────────────────┐
+              │ Tree Ticks        │       │ Tree Ticks Again  │
+              │ Flee Seq:         │       │ Flee Seq:         │
+              │  - Cond: Success  │       │  - Cond: Success  │
+              │  - Calc: Success  │       │  - Calc: Success  │
+              │  - Move: RUNNING  │──────▶│  - Move: RUNNING  │ (still moving)
+              └───────────────────┘       └───────────────────┘
+                                                    │
+                                                    ▼ (after 3 seconds)
+                                              ┌───────────────────┐
+                                              │ Move: SUCCESS     │
+                                              │ Sequence ends.    │
+                                              │ Tree goes back to │
+                                              │ Selector.         │
+                                              └───────────────────┘
+```
+
+---
+
+### 7. The "Forget" Mechanism (Resetting)
+To stop the NPC from fleeing forever, you add a **Cooldown Decorator** or a **Timeout Condition**.
+
+```
+                    ┌──────────────────────────────────┐
+                    │  SEQUENCE (Flee Branch)         │
+                    └───────────────┬──────────────────┘
+                                    │
+                                    ▼
+                    ┌──────────────────────────────────┐
+                    │  DECORATOR: Cooldown (5 sec)    │  (Wraps the Condition)
+                    │  (Allows re-check only after    │
+                    │   5s have passed)               │
+                    └───────────────┬──────────────────┘
+                                    │
+                                    ▼
+                    ┌──────────────────────────────────┐
+                    │  LEAF: Condition                │
+                    │  "Is Threat Detected?"          │
+                    └──────────────────────────────────┘
+```
+
+**Result:** After fleeing, the Condition won't re-trigger for 5 seconds—giving the NPC time to calm down and return to Patrol.
+
+---
+
+### Final Summary Block
+
+```
+┌──────────────┐      ┌──────────────┐      ┌──────────────┐
+│   RAYCAST    │─────▶│  BLACKBOARD  │─────▶│  SELECTOR    │
+│   (Event)    │ Write│  (Memory)    │ Read │  (Priority)  │
+└──────────────┘      └──────────────┘      └──────┬───────┘
+                                                    │
+                          ┌─────────────────────────┼─────────────────────────┐
+                          │                         │                         │
+                          ▼                         ▼                         ▼
+                   ┌──────────────┐          ┌──────────────┐        ┌──────────────┐
+                   │  SEQUENCE    │          │  SEQUENCE    │        │  IDLE        │
+                   │  (Flee)      │          │  (Patrol)    │        │  (Fallback)  │
+                   └──────┬───────┘          └──────────────┘        └──────────────┘
+                          │
+            ┌─────────────┼─────────────┐
+            │             │             │
+            ▼             ▼             ▼
+      ┌──────────┐ ┌──────────┐ ┌──────────┐
+      │CONDITION │ │  ACTION  │ │  ACTION  │
+      │(Threat?) │ │(CalcDir) │ │(MoveTo)  │
+      └──────────┘ └──────────┘ └──────────┘
+```
+
+**The NPC runs because:**  
+1. The **Event** sets a Blackboard flag.  
+2. The Tree’s **Selector** prioritizes the **Flee Sequence** over others.  
+3. The **Condition Leaf** checks the flag and lets the Sequence proceed.  
+4. The **Action Leaves** compute an escape direction and move the NPC—returning `RUNNING` until the escape is complete.
